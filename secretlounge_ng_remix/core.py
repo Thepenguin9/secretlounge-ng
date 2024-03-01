@@ -1,15 +1,14 @@
-#import logging
+import logging
 from datetime import datetime, timedelta
 from threading import Lock
 from importlib import import_module
 from typing import Optional
 
-from secretlounge_ng import replies as rp
-from secretlounge_ng.globals import *
-from secretlounge_ng.database import User, SystemConfig
-from secretlounge_ng.cache import CachedMessage
-from secretlounge_ng.util import genTripcode
-
+from . import replies as rp
+from .globals import *
+from .database import User, SystemConfig
+from .cache import CachedMessage
+from .util import genTripcode
 
 
 # module variables
@@ -174,17 +173,17 @@ class Sender(Receiver): # flawless class hierachy I know...
 	receivers = []
 	@staticmethod
 	def reply(m, msid, who, except_who, reply_to):
-		logging.debug("reply(m.type=%s, msid=%r, reply_to=%r)", rp.types.reverse[m.type], msid, reply_to)
+		logger.debug("reply(m.type=%s, msid=%r, reply_to=%r)", rp.types.reverse[m.type], msid, reply_to)
 		for r in Sender.receivers:
 			r.reply(m, msid, who, except_who, reply_to)
 	@staticmethod
 	def delete(msids):
-		logging.debug("delete(msids=%r)", msids)
+		logger.debug("delete(msids=%r)", msids)
 		for r in Sender.receivers:
 			r.delete(msids)
 	@staticmethod
 	def stop_invoked(who, delete_out=False):
-		logging.debug("stop_invoked(who=%s)", who)
+		logger.debug("stop_invoked(who=%s)", who)
 		for r in Sender.receivers:
 			r.stop_invoked(who, delete_out)
 
@@ -216,7 +215,7 @@ def user_join(c_user: IUserContainer):
 		with db.modifyUser(id=user.id) as user:
 			updateUserFromEvent(user, c_user)
 			user.setLeft(False)
-		logging.info("%s rejoined chat", user)
+		logger.info("%s rejoined chat", user)
 		return rp.Reply(rp.types.CHAT_JOIN)
 
 	# create new user
@@ -227,7 +226,7 @@ def user_join(c_user: IUserContainer):
 	if not any(db.iterateUserIds()):
 		user.rank = RANKS.admin
 
-	logging.info("%s joined chat", user)
+	logger.info("%s joined chat", user)
 	db.addUser(user)
 	ret = [rp.Reply(rp.types.CHAT_JOIN)]
 
@@ -241,13 +240,13 @@ def force_user_leave(user_id, blocked=True):
 	with db.modifyUser(id=user_id) as user:
 		user.setLeft()
 	if blocked:
-		logging.warning("Force leaving %s because bot is blocked", user)
+		logger.warning("Force leaving %s because bot is blocked", user)
 	Sender.stop_invoked(user)
 
 @requireUser
 def user_leave(user: User):
 	force_user_leave(user.id, blocked=False)
-	logging.info("%s left chat", user)
+	logger.error("%s left chat", user)
 
 	return rp.Reply(rp.types.CHAT_LEAVE)
 
@@ -311,7 +310,7 @@ def set_system_text(user: User, key: str, arg: str):
 		raise ValueError()
 	with db.modifySystemConfig() as config:
 		setattr(config, key, arg)
-	logging.info("%s set %s to: %r", user, key, arg)
+	logger.info("%s set %s to: %r", user, key, arg)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -365,7 +364,7 @@ def promote_user(user: User, username2: str, rank: int):
 		_push_system_message(rp.Reply(rp.types.PROMOTED_ADMIN), who=user2)
 	elif rank >= RANKS.mod:
 		_push_system_message(rp.Reply(rp.types.PROMOTED_MOD), who=user2)
-	logging.info("%s was promoted by %s to: %d", user2, user, rank)
+	logger.info("%s was promoted by %s to: %d", user2, user, rank)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -374,7 +373,7 @@ def send_mod_message(user: User, arg: str):
 	text = arg + " ~<b>mods</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
 	_push_system_message(m)
-	logging.info("%s sent mod message: %s", user, arg)
+	logger.info("%s sent mod message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.admin)
@@ -382,7 +381,7 @@ def send_admin_message(user: User, arg: str):
 	text = arg + " ~<b>admins</b>"
 	m = rp.Reply(rp.types.CUSTOM, text=text)
 	_push_system_message(m)
-	logging.info("%s sent admin message: %s", user, arg)
+	logger.info("%s sent admin message: %s", user, arg)
 
 @requireUser
 @requireRank(RANKS.mod)
@@ -405,7 +404,7 @@ def warn_user(user: User, msid, delete=False):
 			return rp.Reply(rp.types.ERR_ALREADY_WARNED)
 	if delete:
 		Sender.delete([msid])
-	logging.info("%s warned [%s]%s", user, user2.getObfuscatedId(), delete and " (message deleted)" or "")
+	logger.info("%s warned [%s]%s", user, user2.getObfuscatedId(), delete and " (message deleted)" or "")
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -421,7 +420,7 @@ def delete_message(user: User, msid):
 	user2 = db.getUser(id=cm.user_id)
 	_push_system_message(rp.Reply(rp.types.MESSAGE_DELETED), who=user2, reply_to=msid)
 	Sender.delete([msid])
-	logging.info("%s deleted a message from [%s]", user, user2.getObfuscatedId())
+	logger.info("%s deleted a message from [%s]", user, user2.getObfuscatedId())
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -438,7 +437,7 @@ def cleanup_messages(user: User):
 			msids.append(msid)
 			cm.upvoted.add(1337)
 	ch.iterateMessages(f)
-	logging.info("%s invoked cleanup (matched: %d)", user, len(msids))
+	logger.error("%s invoked cleanup (matched: %d)", user, len(msids))
 	Sender.delete(msids)
 	return rp.Reply(rp.types.DELETION_QUEUED, count=len(msids))
 
@@ -462,7 +461,7 @@ def uncooldown_user(user: User, oid2=None, username2=None):
 		user2.removeWarning()
 		was_until = user2.cooldownUntil
 		user2.cooldownUntil = None
-	logging.info("%s removed cooldown from %s (was until %s)", user, user2, format_datetime(was_until))
+	logger.info("%s removed cooldown from %s (was until %s)", user, user2, format_datetime(was_until))
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
@@ -482,7 +481,7 @@ def blacklist_user(user: User, msid, reason: str):
 		rp.Reply(rp.types.ERR_BLACKLISTED, reason=reason, contact=blacklist_contact),
 		who=user2, reply_to=msid)
 	Sender.delete([msid])
-	logging.info("%s was blacklisted by %s for: %s", user2, user, reason)
+	logger.info("%s was blacklisted by %s for: %s", user2, user, reason)
 	return rp.Reply(rp.types.SUCCESS)
 
 @requireUser
