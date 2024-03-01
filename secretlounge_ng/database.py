@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from threading import RLock
 from typing import Optional, Generator
 
-from .globals import *
+from secretlounge_ng.globals import *
 
 # what's inside the db
 
