@@ -10,6 +10,7 @@ from secretlounge_ng_remix import core
 from secretlounge_ng_remix import replies as rp
 from secretlounge_ng_remix.util import MutablePriorityQueue, genTripcode
 from secretlounge_ng_remix.globals import *
+from secretlounge_ng_remix.core import logger
 
 # module constants
 MEDIA_FILTER_TYPES = ("photo", "animation", "document", "video", "video_note", "sticker")
@@ -44,7 +45,7 @@ linked_network: dict = None
 def init(config: dict, _db, _ch):
 	global bot, db, ch, message_queue, allow_documents, linked_network
 	if config["bot_token"] == "":
-		logging.error("No telegram token specified.")
+		logger.error("No telegram token specified.")
 		exit(1)
 
 	logging.getLogger("urllib3").setLevel(logging.WARNING) # very noisy with debug otherwise
@@ -59,7 +60,7 @@ def init(config: dict, _db, _ch):
 	allow_documents = config["allow_documents"]
 	linked_network = config.get("linked_network")
 	if linked_network is not None and not isinstance(linked_network, dict):
-		logging.error("Wrong type for 'linked_network'")
+		logger.error("Wrong type for 'linked_network'")
 		exit(1)
 
 	types = ["text", "location", "venue", "story"]
@@ -93,7 +94,7 @@ def run():
 			bot.polling(non_stop=True, long_polling_timeout=49)
 		except Exception as e:
 			# you're not supposed to call .polling() more than once but I'm left with no choice
-			logging.warning("%s while polling Telegram, retrying.", type(e).__name__)
+			logger.warning("%s while polling Telegram, retrying.", type(e).__name__)
 			time.sleep(1)
 
 def register_tasks(sched):
@@ -111,7 +112,7 @@ def register_tasks(sched):
 			return False
 		message_queue.delete(f)
 		if n > 0:
-			logging.warning("Failed to deliver %d messages before they expired from cache.", n)
+			logger.warning("Failed to deliver %d messages before they expired from cache.", n)
 	sched.register(task, hours=6) # (1/4) * cache duration
 
 # Wraps a telegram user in a consistent class
@@ -467,7 +468,7 @@ def check_telegram_exc(e, user_id):
 	if "Too Many Requests" in e.result.text:
 		d = json.loads(e.result.text)["parameters"]["retry_after"]
 		d = min(d, 30) # supposedly this is in seconds, but you sometimes get 100 or even 2000
-		logging.warning("API rate limit hit, waiting for %ds", d)
+		logger.warning("API rate limit hit, waiting for %ds", d)
 		time.sleep(d)
 		return True # retry
 
@@ -510,7 +511,7 @@ class MyReceiver(core.Receiver):
 		# FIXME: there's a hard to avoid race condition here:
 		# if a message is currently being sent, but finishes after we grab the
 		# message ids it will never be deleted
-		for user in db.iterateUsers():
+		for user in db.iterateUsers():v
 			if not user.isJoined():
 				continue
 
@@ -748,10 +749,10 @@ def relay_inner(ev: TMessage, *, caption_text=None, signed=False, tripcode=False
 	if ev.reply_to_message is not None:
 		reply_msid = ch.lookupMapping(ev.from_user.id, data=ev.reply_to_message.message_id)
 		if reply_msid is None:
-			logging.warning("Message replied to not found in cache")
+			logger.warning("Message replied to not found in cache")
 
 	# relay message to all other users
-	logging.debug("relay(): msid=%d reply_msid=%r", msid, reply_msid)
+	logger.debug("relay(): msid=%d reply_msid=%r", msid, reply_msid)
 	for user2 in db.iterateUsers():
 		if not user2.isJoined():
 			continue
